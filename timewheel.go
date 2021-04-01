@@ -33,10 +33,8 @@ type TimeWheel struct {
 	taskRecords *sync.Map
 	// 需要执行的任务，如果时间轮盘上的Task执行同一个Job，可以直接实例化到TimeWheel结构体中。
 	// 此处的优先级低于Task中的Job参数
-	job                 Job
-	addTaskWaitGroup    sync.WaitGroup
-	removeTaskWaitGroup sync.WaitGroup
-	isRunning           bool
+	job       Job
+	isRunning bool
 }
 
 // 需要执行的Job的函数结构体
@@ -75,18 +73,16 @@ func New(interval time.Duration, slotNums int, job Job) *TimeWheel {
 		return nil
 	}
 	tw := &TimeWheel{
-		interval:            interval,
-		slots:               make([]*list.List, slotNums),
-		currentPos:          0,
-		slotNums:            slotNums,
-		addTaskChannel:      make(chan *Task),
-		removeTaskChannel:   make(chan *Task),
-		stopChannel:         make(chan bool),
-		taskRecords:         &sync.Map{},
-		job:                 job,
-		addTaskWaitGroup:    sync.WaitGroup{},
-		removeTaskWaitGroup: sync.WaitGroup{},
-		isRunning:           false,
+		interval:          interval,
+		slots:             make([]*list.List, slotNums),
+		currentPos:        0,
+		slotNums:          slotNums,
+		addTaskChannel:    make(chan *Task),
+		removeTaskChannel: make(chan *Task),
+		stopChannel:       make(chan bool),
+		taskRecords:       &sync.Map{},
+		job:               job,
+		isRunning:         false,
 	}
 
 	tw.initSlots()
@@ -125,16 +121,12 @@ func (tw *TimeWheel) AddTask(interval time.Duration, key interface{}, createdTim
 	if ok {
 		return errors.New("Duplicate task key")
 	}
-
 	tw.addTaskChannel <- &Task{
 		key:         key,
 		interval:    interval,
 		createdTime: createdTime,
 		job:         job,
 	}
-	// 利用WaitGroup来保证该Task已经被成功添加到时间轮盘。从而保证AddTask是一个同步操作
-	tw.addTaskWaitGroup.Add(1)
-	tw.addTaskWaitGroup.Wait()
 
 	return nil
 }
@@ -153,10 +145,6 @@ func (tw *TimeWheel) RemoveTask(key interface{}) error {
 
 	task := val.(*list.Element).Value.(*Task)
 	tw.removeTaskChannel <- task
-
-	// 利用WaitGroup来保证该Task已经被成功从时间轮盘删除，从而保证RemoveTask是个同步操作
-	tw.removeTaskWaitGroup.Add(1)
-	tw.removeTaskWaitGroup.Wait()
 	return nil
 }
 
@@ -219,7 +207,6 @@ func (tw *TimeWheel) runTask() {
 
 			item = next
 			// 重新添加任务到时间轮盘，用Task.interval来获取下一次执行的轮盘位置
-			fmt.Println(fmt.Sprintf("Readd task %s to timewheel after run", task.key))
 			tw.addTask(task, true)
 		}
 	}
@@ -248,7 +235,6 @@ func (tw *TimeWheel) addTask(task *Task, byInterval bool) {
 
 	element := tw.slots[pos].PushBack(task)
 	tw.taskRecords.Store(task.key, element)
-	tw.addTaskWaitGroup.Done()
 }
 
 // 删除任务的内部函数
@@ -260,7 +246,6 @@ func (tw *TimeWheel) removeTask(task *Task) {
 	// 通过TimeWheel.slots获取任务的
 	currentList := tw.slots[task.pos]
 	currentList.Remove(val.(*list.Element))
-	tw.removeTaskWaitGroup.Done()
 }
 
 // 该函数通过任务的周期来计算下次执行的位置和圈数
