@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/lk668/timewheel"
-    "github.com/lk668/timewheel/example"
+	"github.com/lk668/timewheel/example"
 )
 
 func main() {
