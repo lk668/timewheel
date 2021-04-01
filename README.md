@@ -40,11 +40,17 @@ func main() {
 		// task的创建时间是time.Now()
 		// task执行的任务设置为nil，所以默认执行timewheel的Job，也就是example.TimeWheelDefaultJob
 		fmt.Println(fmt.Sprintf("%v Add task task-5s", time.Now().Format(time.RFC3339)))
-		tw.AddTask(5*time.Second, "task-5s", time.Now(), nil)
+		err := tw.AddTask(5*time.Second, "task-5s", time.Now(), nil)
+		if err != nil {
+			panic(err)
+		}
 
 		// 该Task执行example.TaskJob
 		fmt.Println(fmt.Sprintf("%v Add task task-2s", time.Now().Format(time.RFC3339)))
-		tw.AddTask(2*time.Second, "task-2s", time.Now(), example.TaskJob)
+		err = tw.AddTask(2*time.Second, "task-2s", time.Now(), example.TaskJob)
+		if err != nil {
+			panic(err)
+		}
 
 	} else {
 		panic("TimeWheel is not running")
@@ -53,16 +59,23 @@ func main() {
 
 	// 删除task
 	fmt.Println("Remove task task-5s")
-	tw.RemoveTask("task-5s")
+	err := tw.RemoveTask("task-5s")
+	if err != nil {
+		panic(err)
+	}
 
 	time.Sleep(10 * time.Second)
 
 	fmt.Println("Remove task task-2s")
-	tw.RemoveTask("task-2s")
+	err = tw.RemoveTask("task-2s")
+	if err != nil {
+		panic(err)
+	}
 
 	// 关闭时间轮盘
 	tw.Stop()
 }
+
 ```
 
 该例子的输出结果如下
