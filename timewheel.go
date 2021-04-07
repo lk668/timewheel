@@ -17,7 +17,7 @@ import (
 
 // TimeWheel的核心结构体
 type TimeWheel struct {
-	// 时间轮盘的时间
+	// 时间轮盘的精度
 	interval time.Duration
 	// 时间轮盘每个位置存储的Task列表
 	slots  []*list.List
@@ -29,7 +29,7 @@ type TimeWheel struct {
 	addTaskChannel    chan *Task
 	removeTaskChannel chan *Task
 	stopChannel       chan bool
-	// Map结构来存储Task对象，key是Task.key，value是Task对象
+	// Map结构来存储Task对象，key是Task.key，value是Task在双向链表中的存储对象，本文的结构是list.Element
 	taskRecords *sync.Map
 	// 需要执行的任务，如果时间轮盘上的Task执行同一个Job，可以直接实例化到TimeWheel结构体中。
 	// 此处的优先级低于Task中的Job参数
@@ -54,6 +54,8 @@ type Task struct {
 	circle int
 	// 任务需要执行的Job，优先级高于TimeWheel中的Job
 	job Job
+	// 任务需要执行的次数，如果需要一直执行，设置成-1
+	times int
 }
 
 var tw *TimeWheel
@@ -111,7 +113,7 @@ func (tw *TimeWheel) IsRunning() bool {
 // @param interval    任务的周期
 // @param key         任务的key，必须是唯一的，否则添加任务的时候会失败
 // @param createTime  任务的创建时间
-func (tw *TimeWheel) AddTask(interval time.Duration, key interface{}, createdTime time.Time, job Job) error {
+func (tw *TimeWheel) AddTask(interval time.Duration, key interface{}, createdTime time.Time, times int, job Job) error {
 	if interval <= 0 || key == nil {
 		return errors.New("Invalid task params")
 	}
@@ -126,6 +128,7 @@ func (tw *TimeWheel) AddTask(interval time.Duration, key interface{}, createdTim
 		interval:    interval,
 		createdTime: createdTime,
 		job:         job,
+		times:       times,
 	}
 
 	return nil
@@ -160,7 +163,7 @@ func (tw *TimeWheel) start() {
 	for {
 		select {
 		case <-tw.ticker.C:
-			tw.runTask()
+			tw.checkAndRunTask()
 		case task := <-tw.addTaskChannel:
 			// 此处利用Task.createTime来定位任务在时间轮盘的位置和执行圈数
 			// 如果直接用任务的周期来定位位置，那么在服务重启的时候，任务周器相同的点会被定位到相同的卡槽，
@@ -176,7 +179,7 @@ func (tw *TimeWheel) start() {
 }
 
 // 检查该轮盘点位上的Task，看哪个需要执行
-func (tw *TimeWheel) runTask() {
+func (tw *TimeWheel) checkAndRunTask() {
 
 	// 获取该轮盘位置的双向链表
 	currentList := tw.slots[tw.currentPos]
@@ -206,8 +209,20 @@ func (tw *TimeWheel) runTask() {
 			currentList.Remove(item)
 
 			item = next
+
 			// 重新添加任务到时间轮盘，用Task.interval来获取下一次执行的轮盘位置
-			tw.addTask(task, true)
+			if task.times != 0 {
+				if task.times < 0 {
+					tw.addTask(task, true)
+				} else {
+					task.times--
+					tw.addTask(task, true)
+				}
+
+			} else {
+				// 将任务从taskRecords中删除
+				tw.taskRecords.Delete(task.key)
+			}
 		}
 	}
 

@@ -40,14 +40,14 @@ func main() {
 		// task的创建时间是time.Now()
 		// task执行的任务设置为nil，所以默认执行timewheel的Job，也就是example.TimeWheelDefaultJob
 		fmt.Println(fmt.Sprintf("%v Add task task-5s", time.Now().Format(time.RFC3339)))
-		err := tw.AddTask(5*time.Second, "task-5s", time.Now(), nil)
+		err := tw.AddTask(5*time.Second, "task-5s", time.Now(), -1, nil)
 		if err != nil {
 			panic(err)
 		}
 
 		// 该Task执行example.TaskJob
 		fmt.Println(fmt.Sprintf("%v Add task task-2s", time.Now().Format(time.RFC3339)))
-		err = tw.AddTask(2*time.Second, "task-2s", time.Now(), example.TaskJob)
+		err = tw.AddTask(2*time.Second, "task-2s", time.Now(), -1, example.TaskJob)
 		if err != nil {
 			panic(err)
 		}
