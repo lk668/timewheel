@@ -34,6 +34,7 @@ type TimeWheel struct {
 	// 需要执行的任务，如果时间轮盘上的Task执行同一个Job，可以直接实例化到TimeWheel结构体中。
 	// 此处的优先级低于Task中的Job参数
 	job       Job
+	wait      chan int
 	isRunning bool
 }
 
@@ -84,6 +85,7 @@ func New(interval time.Duration, slotNums int, job Job) *TimeWheel {
 		stopChannel:       make(chan bool),
 		taskRecords:       &sync.Map{},
 		job:               job,
+		wait:              make(chan int, 1),
 		isRunning:         false,
 	}
 
@@ -123,6 +125,8 @@ func (tw *TimeWheel) AddTask(interval time.Duration, key interface{}, createdTim
 	if ok {
 		return errors.New("Duplicate task key")
 	}
+
+	tw.wait <- 1
 	tw.addTaskChannel <- &Task{
 		key:         key,
 		interval:    interval,
@@ -147,6 +151,7 @@ func (tw *TimeWheel) RemoveTask(key interface{}) error {
 	}
 
 	task := val.(*list.Element).Value.(*Task)
+	tw.wait <- 1
 	tw.removeTaskChannel <- task
 	return nil
 }
@@ -250,6 +255,10 @@ func (tw *TimeWheel) addTask(task *Task, byInterval bool) {
 
 	element := tw.slots[pos].PushBack(task)
 	tw.taskRecords.Store(task.key, element)
+
+	defer func() {
+		<-tw.wait
+	}()
 }
 
 // 删除任务的内部函数
@@ -261,6 +270,10 @@ func (tw *TimeWheel) removeTask(task *Task) {
 	// 通过TimeWheel.slots获取任务的
 	currentList := tw.slots[task.pos]
 	currentList.Remove(val.(*list.Element))
+
+	defer func() {
+		<-tw.wait
+	}()
 }
 
 // 该函数通过任务的周期来计算下次执行的位置和圈数
