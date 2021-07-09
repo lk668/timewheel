@@ -28,7 +28,7 @@ import (
 
 func main() {
 	//初始化一个时间间隔是1s，一共有60个齿轮的时间轮盘，默认轮盘转动一圈的时间是60s
-	tw := timewheel.GetTimeWheel(1*time.Second, 60, example.TimeWheelDefaultJob)
+	tw := timewheel.CreateTimeWheel(1*time.Second, 60, example.TimeWheelDefaultJob)
 
 	// 启动时间轮盘
 	tw.Start()
