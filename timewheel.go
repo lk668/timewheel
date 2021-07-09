@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// TimeWheel的核心结构体
+// TimeWheel 核心结构体
 type TimeWheel struct {
 	// 时间轮盘的精度
 	interval time.Duration
@@ -34,14 +34,13 @@ type TimeWheel struct {
 	// 需要执行的任务，如果时间轮盘上的Task执行同一个Job，可以直接实例化到TimeWheel结构体中。
 	// 此处的优先级低于Task中的Job参数
 	job       Job
-	wait      chan int
 	isRunning bool
 }
 
-// 需要执行的Job的函数结构体
+// Job 需要执行的Job的函数结构体
 type Job func(interface{})
 
-// 时间轮盘上需要执行的任务
+// Task 时间轮盘上需要执行的任务
 type Task struct {
 	// 用来标识task对象，是唯一的
 	key interface{}
@@ -62,11 +61,22 @@ type Task struct {
 var tw *TimeWheel
 var once sync.Once
 
-// GetTimeWheel 用来实现TimeWheel的单例模式
-func GetTimeWheel(interval time.Duration, slotNums int, job Job) *TimeWheel {
+// ErrDuplicateTaskKey is an error for duplicate task key
+var ErrDuplicateTaskKey = errors.New("Duplicate task key")
+
+// ErrTaskKeyNotFount is an error when task key is not found
+var ErrTaskKeyNotFount = errors.New("Task key doesn't existed in task list, please check your input")
+
+// CreateTimeWheel 用来实现TimeWheel的单例模式
+func CreateTimeWheel(interval time.Duration, slotNums int, job Job) *TimeWheel {
 	once.Do(func() {
 		tw = New(interval, slotNums, job)
 	})
+	return tw
+}
+
+// GetTimeWheel 返回tw对象
+func GetTimeWheel() *TimeWheel {
 	return tw
 }
 
@@ -85,7 +95,6 @@ func New(interval time.Duration, slotNums int, job Job) *TimeWheel {
 		stopChannel:       make(chan bool),
 		taskRecords:       &sync.Map{},
 		job:               job,
-		wait:              make(chan int, 1),
 		isRunning:         false,
 	}
 
@@ -123,10 +132,9 @@ func (tw *TimeWheel) AddTask(interval time.Duration, key interface{}, createdTim
 	// 检查Task.Key是否已经存在
 	_, ok := tw.taskRecords.Load(key)
 	if ok {
-		return errors.New("Duplicate task key")
+		return ErrDuplicateTaskKey
 	}
 
-	tw.wait <- 1
 	tw.addTaskChannel <- &Task{
 		key:         key,
 		interval:    interval,
@@ -147,11 +155,10 @@ func (tw *TimeWheel) RemoveTask(key interface{}) error {
 	// 检查该Task是否存在
 	val, ok := tw.taskRecords.Load(key)
 	if !ok {
-		return errors.New("Task key doesn't existed in task list, please check your input")
+		return ErrTaskKeyNotFount
 	}
 
 	task := val.(*list.Element).Value.(*Task)
-	tw.wait <- 1
 	tw.removeTaskChannel <- task
 	return nil
 }
@@ -255,10 +262,6 @@ func (tw *TimeWheel) addTask(task *Task, byInterval bool) {
 
 	element := tw.slots[pos].PushBack(task)
 	tw.taskRecords.Store(task.key, element)
-
-	defer func() {
-		<-tw.wait
-	}()
 }
 
 // 删除任务的内部函数
@@ -270,10 +273,6 @@ func (tw *TimeWheel) removeTask(task *Task) {
 	// 通过TimeWheel.slots获取任务的
 	currentList := tw.slots[task.pos]
 	currentList.Remove(val.(*list.Element))
-
-	defer func() {
-		<-tw.wait
-	}()
 }
 
 // 该函数通过任务的周期来计算下次执行的位置和圈数
