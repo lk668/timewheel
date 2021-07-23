@@ -223,6 +223,7 @@ func (tw *TimeWheel) checkAndRunTask() {
 			item = next
 
 			// 重新添加任务到时间轮盘，用Task.interval来获取下一次执行的轮盘位置
+			// 如果times==0,说明已经完成执行周期,不需要再添加任务回时间轮盘
 			if task.times != 0 {
 				if task.times < 0 {
 					tw.addTask(task, true)
@@ -231,9 +232,6 @@ func (tw *TimeWheel) checkAndRunTask() {
 					tw.addTask(task, true)
 				}
 
-			} else {
-				// 将任务从taskRecords中删除
-				tw.taskRecords.Delete(task.key)
 			}
 		}
 	}
